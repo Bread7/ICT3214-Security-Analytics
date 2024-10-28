@@ -1,0 +1,7 @@
+# models
+*.gguf
+*.ggml
+
+# datasets
+*.jsonl
+*.csv
