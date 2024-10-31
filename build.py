@@ -89,16 +89,18 @@ model_name = "mistralai/Mistral-7B-Instruct-v0.1"
 compute_dtype = getattr(torch, bnb_4bit_compute_dtype)
 
 bnb_config = BitsAndBytesConfig(
-    load_in_4bit=use_4bit,
-    bnb_4bit_quant_type=bnb_4bit_quant_type,
+    load_in_4bit=True,
+    bnb_4bit_use_double_quant=False,
+    bnb_4bit_quant_type="nf4",
     bnb_4bit_compute_dtype=compute_dtype,
-    bnb_4bit_use_double_quant=use_nested_quant,
 )
 
 base_model = AutoModelForCausalLM.from_pretrained(
     model_name,
-    quantization_config=bnb_config,
-    device_map=device_map,
+    load_in_4bit=True,  # Enable 4-bit loading
+    bnb_4bit_quant_type="nf4",  # Specify quantization type
+    device_map="auto",  # Automatically place the model on the available GPU
+    trust_remote_code=True,  # If using models with custom code
 )
 
 tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
@@ -106,22 +108,30 @@ tokenizer.pad_token = tokenizer.eos_token
 tokenizer.padding_side = "right"
 
 # Fine tune with qLora and Supervised finetuning
+# peft_config = LoraConfig(
+#     lora_alpha=lora_alpha,
+#     lora_dropout=lora_dropout,
+#     r=lora_r,
+#     bias="none",
+#     task_type="CASUAL_LM",
+#     target_modules=[
+#         "q_proj",
+#         "k_proj",
+#         "v_proj",
+#         "o_proj",
+#         "gate_proj",
+#         "up_proj",
+#         "down_proj",
+#         "lm_head",
+#     ],
+# )
+
 peft_config = LoraConfig(
-    lora_alpha=lora_alpha,
-    lora_dropout=lora_dropout,
-    r=lora_r,
+    r=32,
+    lora_alpha=64,
+    lora_dropout=0.05,
     bias="none",
-    task_type="CASUAL_LM",
-    target_modules=[
-        "q_proj",
-        "k_proj",
-        "v_proj",
-        "o_proj",
-        "gate_proj",
-        "up_proj",
-        "down_proj",
-        "lm_head",
-    ],
+    task_type="CAUSAL_LM",
 )
 
 training_arguments = TrainingArguments(
@@ -134,7 +144,7 @@ training_arguments = TrainingArguments(
     logging_steps=logging_steps,
     learning_rate=learning_rate,
     weight_decay=weight_decay,
-    fp16=fp16,
+    fp16=True,
     bf16=bf16,
     max_grad_norm=max_grad_norm,
     max_steps=100,  # the total number of training steps to perform
@@ -149,7 +159,7 @@ trainer = SFTTrainer(
     train_dataset=train_dataset,
     peft_config=peft_config,
     dataset_text_field="text",
-    max_seq_length=max_seq_length,
+    max_seq_length=128,
     tokenizer=tokenizer,
     args=training_arguments,
     packing=packing,
@@ -158,16 +168,16 @@ trainer = SFTTrainer(
 trainer.train()
 trainer.model.save_pretrained(new_model)
 
-# Infer fine-tuned model
-eval_prompt = """print hello world in python"""
-model_input = tokenizer(eval_prompt, return_tensors="pt").to("cuda")
-model.eval()
-with torch.no_grad():
-    generated_code = tokenizer.decocde(
-        model.generate(**model_input, max_new_tokens=256, pad_token_id=2)[0],
-        skip_special_tokens=True,
-    )
-print(generated_code)
+# # Infer fine-tuned model
+# eval_prompt = """print hello world in python"""
+# model_input = tokenizer(eval_prompt, return_tensors="pt").to("cuda")
+# model.eval()
+# with torch.no_grad():
+#     generated_code = tokenizer.decocde(
+#         model.generate(**model_input, max_new_tokens=256, pad_token_id=2)[0],
+#         skip_special_tokens=True,
+#     )
+# print(generated_code)
 
 # Merge modeL
 base_model = AutoModelForCausalLM.from_pretrained(
