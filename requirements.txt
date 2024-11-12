@@ -74,3 +74,5 @@ tzdata==2024.2
 urllib3==2.2.3
 xxhash==3.5.0
 yarl==1.16.0
+langchain
+txtai
