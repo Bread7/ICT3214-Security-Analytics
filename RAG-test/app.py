@@ -261,23 +261,75 @@ def generate_response(llm, prompt, max_tokens=400):
         sys.exit(1)
 
 
-@app.route("/", methods=["GET", "POST"])
+@app.route("/", methods=["GET"])
 def server_is_running():
     return jsonify({"status": 200, "data": "Threat Intelligence GPT is running!"})
 
 
 @app.route("/query", methods=["POST"])
 def query():
-    print(request)
-    return "hello"
+    if request.method != "POST":
+        return jsonify({"status": 405, "data": "Only POST method allowed"})
+    output = {
+        "question_id": "",
+        "user_question": "",
+        "predicted_domain": "",
+        "model_name": "",
+        "response_text": "",
+    }
+    req_data = request.json
+    if (
+        not req_data["question_id"]
+        and not req_data["user_question"]
+        and not req["predicted_domain"]
+        and not req_data["model_name"]
+    ):
+        return jsonify({"status": 400, "data": "Missing input data"})
+    output["question_id"] = req_data["question_id"]
+    output["user_question"] = req_data["user_question"]
+    output["predicted_domain"] = req_data["predicted_domain"]
+    output["model_name"] = req_data["model_name"]
+
+    user_question = req_data["user_question"]
+    answer = model_query_process(user_question)
+    output["response_text"] = answer
+    return jsonify(output)
+
+
+def model_query_process(user_question):
+    # Parse command-line arguments
+    args = parse_arguments()
+
+    # Load the txtai index
+    index = load_embeddings(args.index_path)
+
+    # Load UID to content mapping
+    uid_to_content = load_uid_mapping(args.mapping_path)
+
+    # Perform the search
+    results = perform_search(index, user_question, args.num_results)
+
+    # Retrieve and process context
+    filtered_context = retrieve_context(results, uid_to_content)
+
+    # Load the Llama model
+    llm = load_llama_model(args.model_path)
+
+    # Format the prompt
+    prompt = generate_prompt(filtered_context, args.query)
+
+    # Generate response
+    answer = generate_response(llm, prompt, max_tokens=400)
+
+    return answer
 
 
 def main():
     # # Parse command-line arguments
     # args = parse_arguments()
     #
-    # # Setup logging
-    # setup_logging()
+    # Setup logging
+    setup_logging()
     #
     # # Load the txtai index
     # index = load_embeddings(args.index_path)
