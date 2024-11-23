@@ -26,6 +26,8 @@ for filename in os.listdir(json_dir):
                 if item.get("type") == "attack-pattern":
                     name = item.get("name", "No Name")
                     description = item.get("description", "No Description")
+                    platform = item.get("x_mitre_platforms", "No Platform")
+                    detection = item.get("x_mitre_detection", "No Detection")
                     external_references = item.get("external_references", [])
                     external_id = next(
                         (ref.get("external_id") for ref in external_references if "external_id" in ref),
@@ -33,11 +35,29 @@ for filename in os.listdir(json_dir):
                     )
                     if external_id == "No External ID" or name == "No Name":
                         continue
-                    page_content = f"ID: {external_id}\nName: {name}\nDescription: {description}"
+                    page_content = f"ID: {external_id}\nName: {name}\nDescription: {description}\nPlatform: {platform}\nDetection {detection}"
                     chunks = text_splitter.split_text(page_content)
                     for chunk in chunks:
                         unique_id = str(uuid.uuid4())  # Generate a unique UID
-                        parsed_data.append((unique_id, chunk, {"content": chunk, "name": name, "external_id": external_id}))
+                        parsed_data.append((unique_id, chunk, {"content": chunk, "name": name, "external_id": external_id, "platform": platform, "detection": detection}))
+                        uid_to_content[unique_id] = chunk  # Map UID to content
+
+                if item.get("type") == "intrusion-set":
+                    name = item.get("name", "No Name")
+                    description = item.get("description", "No Description")
+                    aliases = item.get("aliases", "No Alias")
+                    external_references = item.get("external_references", [])
+                    external_id = next(
+                        (ref.get("external_id") for ref in external_references if "external_id" in ref),
+                        "No External ID"
+                    )
+                    if external_id == "No External ID" or name == "No Name":
+                        continue
+                    page_content = f"ID: {external_id}\nName: {name}\nDescription: {description}\nAliases: {aliases}"
+                    chunks = text_splitter.split_text(page_content)
+                    for chunk in chunks:
+                        unique_id = str(uuid.uuid4())  # Generate a unique UID
+                        parsed_data.append((unique_id, chunk, {"content": chunk, "name": name, "external_id": external_id, "aliases": aliases}))
                         uid_to_content[unique_id] = chunk  # Map UID to content
 
 # Initialize txtai embeddings index
