@@ -1,14 +1,9 @@
-import argparse
 import json
 import logging
+import argparse
 import sys
-
-from flask import Flask, jsonify, request
-from llama_cpp import Llama
 from txtai.embeddings import Embeddings
-
-app = Flask(__name__)
-
+from llama_cpp import Llama
 
 def parse_arguments():
     """
@@ -25,38 +20,37 @@ def parse_arguments():
         "--query",
         type=str,
         required=True,
-        help="The query string to search and generate a response for.",
+        help="The query string to search and generate a response for."
     )
     parser.add_argument(
         "-n",
         "--num_results",
         type=int,
-        default=5,
-        help="Number of top search results to retrieve (default: 5).",
+        default=10,
+        help="Number of top search results to retrieve (default: 10)."
     )
     parser.add_argument(
         "-i",
         "--index_path",
         type=str,
         default="mitre_attack_txtai_index",
-        help="Path to the txtai embeddings index (default: 'mitre_attack_txtai_index').",
+        help="Path to the txtai embeddings index (default: 'mitre_attack_txtai_index')."
     )
     parser.add_argument(
         "-m",
         "--mapping_path",
         type=str,
         default="uid_to_content.json",
-        help="Path to the UID to content mapping JSON file (default: 'uid_to_content.json').",
+        help="Path to the UID to content mapping JSON file (default: 'uid_to_content.json')."
     )
     parser.add_argument(
         "-model",
         "--model_path",
         type=str,
-        default="mistral-7b-instruct-v0.2.Q5_K_M.gguf",
-        help="Path to the Llama model file (default: 'mistral-7b-instruct-v0.2.Q5_K_M.gguf').",
+        default="Mistral-7B-Instruct-v0.3.Q4_K_M.gguf",
+        help="Path to the Llama model file (default: 'Mistral-7B-Instruct-v0.3.Q4_K_M.gguf')."
     )
     return parser.parse_args()
-
 
 def setup_logging():
     """
@@ -64,10 +58,11 @@ def setup_logging():
     """
     logging.basicConfig(
         level=logging.INFO,
-        format="%(asctime)s - %(levelname)s - %(message)s",
-        handlers=[logging.StreamHandler(sys.stdout)],
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.StreamHandler(sys.stdout)
+        ]
     )
-
 
 def load_embeddings(index_path):
     """
@@ -87,7 +82,6 @@ def load_embeddings(index_path):
     except Exception as e:
         logging.error(f"Failed to load txtai index from '{index_path}': {e}")
         sys.exit(1)
-
 
 def load_uid_mapping(mapping_path):
     """
@@ -114,11 +108,8 @@ def load_uid_mapping(mapping_path):
         logging.error(f"Invalid JSON format in '{mapping_path}': {e}")
         sys.exit(1)
     except Exception as e:
-        logging.error(
-            f"Failed to load UID to content mapping from '{mapping_path}': {e}"
-        )
+        logging.error(f"Failed to load UID to content mapping from '{mapping_path}': {e}")
         sys.exit(1)
-
 
 def perform_search(index, query, num_results):
     """
@@ -140,7 +131,6 @@ def perform_search(index, query, num_results):
         logging.error(f"Error during search: {e}")
         sys.exit(1)
 
-
 def retrieve_context(results, uid_to_content):
     """
     Retrieve and process context based on search results.
@@ -159,25 +149,24 @@ def retrieve_context(results, uid_to_content):
             context_lines.append(content)
         else:
             logging.warning(f"No content found for UID '{uid}'.")
-
+    
     if not context_lines:
         logging.error("No relevant context found for the query.")
         sys.exit(1)
-
+    
     context = "\n".join(context_lines)
-
+    
     # Remove duplicate lines while preserving order
     filtered_context = "\n".join(dict.fromkeys(context.split("\n")))
-
+    
     # Debugging: Log the retrieved context
     logging.info("Retrieved Context:")
     logging.info(context)
-
+    
     logging.info("Retrieved Filtered Context:")
     logging.info(filtered_context)
-
+    
     return filtered_context
-
 
 def load_llama_model(model_path):
     """
@@ -190,13 +179,12 @@ def load_llama_model(model_path):
         Llama: Loaded Llama model object.
     """
     try:
-        llm = Llama(model_path=model_path, n_ctx=2048, temperature=0.2)
+        llm = Llama(model_path=model_path, n_ctx=4092, temperature=0.2)
         logging.info(f"Loaded Llama model from '{model_path}'.")
         return llm
     except Exception as e:
         logging.error(f"Failed to load Llama model from '{model_path}': {e}")
         sys.exit(1)
-
 
 def generate_prompt(context, query):
     """
@@ -221,22 +209,35 @@ Answer the question strictly based on the context provided above.
 Include all relevant details explicitly mentioned in the context.
 Do not omit any specific points and avoid generalizations or introducing information not found in the context.
 If examples are included in the context, incorporate them into the answer.
-
+Do not mention "in the context".
 
 Do not answer if the context does not explicitly contain the queried term.
 If the queried term is widely recognized (e.g., high-profile vulnerabilities or techniques), provide a concise explanation based on your pretrained knowledge. Otherwise, respond with: "The requested term does not exist in the provided context."
 
+When answering questions about technique:
+Ensure the retrieved context explicitly mentions the specified technique.
+If there are multiple retrieved context with mention of the specified technique, 
+Always include platform of the technique.
+If the specified ID does not appear in the retrieved context, respond with: "The requested technique does not exist in the provided context." Provide no further information.
 
 When answering questions about technique IDs:
 Ensure the retrieved context explicitly mentions the specified ID.
+Always include platform of the technique ID.
 If the specified ID does not appear in the retrieved context, respond with: "The requested ID does not exist in the provided context." Provide no further information.
 
+When answering questions about APT groups:
+Ensure the retrieved context explicitly mentions the specified APT group.
+Always include aliases of the APT group.
+If the specified APT group does not appear in the retrieved context, respond with: "The requested APT group does not exist in the provided context." Provide no further information.
+
+When answering questions about Malware family:
+Ensure the retrieved context explicitly mentions the specified Malware family
+If the specified Malware family does not appear in the retrieved context, respond with: "The requested Malware family does not exist in the provided context." Provide no further information.
 
 ### Answer:
 
 """
     return prompt
-
 
 def generate_response(llm, prompt, max_tokens=400):
     """
@@ -260,51 +261,36 @@ def generate_response(llm, prompt, max_tokens=400):
         logging.error(f"Error during model inference: {e}")
         sys.exit(1)
 
-
-@app.route("/", methods=["GET", "POST"])
-def server_is_running():
-    return jsonify({"status": 200, "data": "Threat Intelligence GPT is running!"})
-
-
-@app.route("/query", methods=["POST"])
-def query():
-    print(request)
-    return "hello"
-
-
 def main():
-    # # Parse command-line arguments
-    # args = parse_arguments()
-    #
-    # # Setup logging
-    # setup_logging()
-    #
-    # # Load the txtai index
-    # index = load_embeddings(args.index_path)
-    #
-    # # Load UID to content mapping
-    # uid_to_content = load_uid_mapping(args.mapping_path)
-    #
-    # # Perform the search
-    # results = perform_search(index, args.query, args.num_results)
-    #
-    # # Retrieve and process context
-    # filtered_context = retrieve_context(results, uid_to_content)
-    #
-    # # Load the Llama model
-    # llm = load_llama_model(args.model_path)
-    #
-    # # Format the prompt
-    # prompt = generate_prompt(filtered_context, args.query)
-    #
-    # Run web server
-    app.run(host="0.0.0.0", port=8888)
-    # # Generate the response
-    # try:
-    #     answer = generate_response(llm, prompt, max_tokens=400)
-    # finally:
-    #     llm.close()  # Ensure the model is closed even if an error occurs
-
+    # Parse command-line arguments
+    args = parse_arguments()
+    
+    # Setup logging
+    setup_logging()
+    
+    # Load the txtai index
+    index = load_embeddings(args.index_path)
+    
+    # Load UID to content mapping
+    uid_to_content = load_uid_mapping(args.mapping_path)
+    
+    # Perform the search
+    results = perform_search(index, args.query, args.num_results)
+    
+    # Retrieve and process context
+    filtered_context = retrieve_context(results, uid_to_content)
+    
+    # Load the Llama model
+    llm = load_llama_model(args.model_path)
+    
+    # Format the prompt
+    prompt = generate_prompt(filtered_context, args.query)
+    
+    # Generate the response
+    try:
+        answer = generate_response(llm, prompt, max_tokens=400)
+    finally:
+        llm.close()  # Ensure the model is closed even if an error occurs
 
 if __name__ == "__main__":
     main()
