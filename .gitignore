@@ -5,3 +5,4 @@
 # datasets
 *.jsonl
 *.csv
+raw-dataset/
