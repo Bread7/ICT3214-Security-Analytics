@@ -330,7 +330,7 @@ def model_query_process(user_question):
     llm = load_llama_model(args.model_path)
 
     # Format the prompt
-    prompt = generate_prompt(filtered_context, args.query)
+    prompt = generate_prompt(filtered_context, user_question)
 
     # Generate response
     answer = generate_response(llm, prompt, max_tokens=400)
